@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Credentials
+credentials.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Generated lead exports (Google Sheets + browser download are the source of truth)
+data/

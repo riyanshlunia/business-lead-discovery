@@ -1,0 +1,64 @@
+.stats-bar { margin-bottom: 24px; }
+.stats-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin-bottom: 16px;
+}
+@media (max-width: 700px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.stat-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px 24px;
+  animation: countUp 0.4s ease both;
+  transition: all 0.2s;
+  display: flex; flex-direction: column; align-items: flex-start;
+}
+.stat-card:hover { border-color: var(--border-hover); }
+
+/* Remove the top color borders to keep it minimalist */
+.stat-blue, .stat-red, .stat-yellow, .stat-purple { border-top: 1px solid var(--border); }
+
+.stat-icon  { display: none; }
+.stat-value {
+  font-family: var(--font-display); font-size: 32px;
+  font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+  color: var(--primary);
+  display: inline-flex; align-items: baseline; gap: 4px;
+}
+.stat-suffix {
+  font-size: 14px; font-weight: 500;
+  color: var(--text-muted);
+}
+.stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-top: 8px; }
+
+/* Social presence summary */
+.social-summary-banner {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 20px;
+  font-size: 14px; color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.social-summary-banner strong { color: var(--primary); }
+
+/* Export banner */
+.export-banner {
+  background: rgba(16,185,129,0.05); border: 1px solid rgba(16,185,129,0.2);
+  border-radius: var(--radius); padding: 16px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
+}
+.export-info { display: flex; align-items: center; gap: 16px; }
+.export-check {
+  font-size: 20px;
+  color: var(--success);
+}
+.export-title { font-weight: 600; font-size: 14px; color: var(--success); }
+.export-msg   { font-size: 13px; color: var(--text-secondary); }
+.sheet-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--success); border: 1px solid var(--success);
+  color: var(--bg-base); padding: 10px 16px; border-radius: var(--radius);
+  text-decoration: none; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+  transition: all 0.2s; white-space: nowrap;
+}
+.sheet-btn:hover { opacity: 0.9; }

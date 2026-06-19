@@ -1,0 +1,86 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* ARCHON Void Palette */
+  --bg-base: #000000;
+  --bg-surface: #0A0A0A;
+  --bg-card: #0A0A0A;
+  --bg-card-hover: #141414;
+  
+  --border: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(255, 255, 255, 0.3);
+  --border-solid: #1A1A1A;
+  
+  --primary: #ffffff;
+  --primary-hover: #e5e2e1;
+  --primary-dark: #c6c6c7;
+  --primary-glow: rgba(255, 255, 255, 0.15);
+  
+  --accent: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.1);
+  
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #c0c0c0;
+  --text-muted: #8e9192;
+  
+  --font-main: 'Inter', sans-serif;
+  --font-display: 'Inter', sans-serif;
+  
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+  
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-main);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  overflow-x: hidden;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
+
+/* Material Symbols */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Utility Classes */
+.text-label-caps {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.text-data-mono {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+}
+
+/* Animations */
+@keyframes fadeInUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+@keyframes pulse-glow { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+@keyframes countUp { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
