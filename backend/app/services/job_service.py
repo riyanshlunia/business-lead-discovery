@@ -30,12 +30,7 @@ class JobService:
         await session.flush()
         await session.commit()
         await session.refresh(job)
-
-        # Run the lead generation directly (no Celery)
-        from app.workers.tasks import run_pipeline
-
-        await run_pipeline(job.id)
-
+        
         return job
 
     async def get_job(self, session: AsyncSession, job_id: int) -> Job | None:
