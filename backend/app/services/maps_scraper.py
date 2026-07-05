@@ -32,7 +32,7 @@ class GoogleMapsScraper:
     def __init__(self, headless: bool = True) -> None:
         self._headless = headless
 
-    async def discover_businesses(self, industry: str, location: str, limit: int = 100) -> list[MapBusinessCandidate]:
+    async def discover_businesses(self, industry: str, location: str, limit: int = 100, progress_callback = None) -> list[MapBusinessCandidate]:
         query = f"{industry} in {location}"
         search_url = f"https://www.google.com/maps/search/{quote_plus(query)}"
         async with async_playwright() as playwright:
@@ -40,19 +40,25 @@ class GoogleMapsScraper:
             context = await browser.new_context(viewport={"width": 1440, "height": 1100})
             page = await context.new_page()
             try:
+                if progress_callback:
+                    await progress_callback(5)
                 await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
                 await self._dismiss_cookie_banner(page)
                 self._assert_no_captcha(await page.content())
                 await page.wait_for_timeout(4000)
+                if progress_callback:
+                    await progress_callback(10)
                 candidates = await self._collect_cards(page, limit)
-                await self._enrich_candidates(page, candidates)
+                if progress_callback:
+                    await progress_callback(20)
+                await self._enrich_candidates(page, candidates, progress_callback)
                 return candidates
             finally:
                 await context.close()
                 await browser.close()
 
-    async def _enrich_candidates(self, page: Page, candidates: list[MapBusinessCandidate]) -> None:
-        for candidate in candidates:
+    async def _enrich_candidates(self, page: Page, candidates: list[MapBusinessCandidate], progress_callback = None) -> None:
+        for idx, candidate in enumerate(candidates):
             try:
                 # Navigate directly to the business URL — avoids the virtual-scroll
                 # problem where off-screen card DOM nodes are removed by Google Maps.
@@ -77,6 +83,10 @@ class GoogleMapsScraper:
                 candidate.category = self._extract_category(panel_text)
             except Exception:
                 continue
+            finally:
+                if progress_callback:
+                    pct = 20 + int(((idx + 1) / len(candidates)) * 40)
+                    await progress_callback(min(60, pct))
 
     async def _extract_website(self, page: Page) -> str | None:
         # Primary: data-item-id="authority" is the official website button in Maps

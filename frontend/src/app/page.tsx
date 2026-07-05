@@ -370,14 +370,17 @@ export default function HomePage() {
     },
   });
 
-  const businessesQuery = useQuery({
-    queryKey: ['businesses', jobId],
-    queryFn: () => getBusinesses(jobId as number),
-    enabled: jobId !== null && jobQuery.data?.status === 'completed',
-  });
-
   const status = jobQuery.data?.status as string | undefined;
   const statusColor = status === 'completed' ? 'green' : status === 'failed' ? 'red' : status === 'running' ? 'yellow' : 'slate';
+
+  const businessesQuery = useQuery({
+    queryKey: ['businesses', jobId, status],
+    queryFn: () => getBusinesses(jobId as number),
+    enabled: jobId !== null,
+    refetchInterval: () => {
+      return status === 'running' ? 2500 : false;
+    },
+  });
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">

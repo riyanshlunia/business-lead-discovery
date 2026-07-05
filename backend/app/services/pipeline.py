@@ -30,8 +30,14 @@ class LeadGenerationPipeline:
             return
         await self._job_service.set_job_status(session, job_id, JobStatus.running)
 
+        async def progress_callback(progress_val: int):
+            job.progress = progress_val
+            await session.commit()
+
         try:
-            candidates = await self._maps_scraper.discover_businesses(job.industry, job.location, job.target_limit)
+            candidates = await self._maps_scraper.discover_businesses(
+                job.industry, job.location, job.target_limit, progress_callback
+            )
             await self._persist_candidates(session, job, candidates)
             await self._job_service.set_job_status(session, job_id, JobStatus.completed)
         except Exception as exc:
@@ -44,12 +50,45 @@ class LeadGenerationPipeline:
             await self._job_service.set_job_status(session, job_id, JobStatus.failed, error_message=error_message)
 
     async def _persist_candidates(self, session: AsyncSession, job: Job, candidates: list[MapBusinessCandidate]) -> None:
+        import asyncio
         total = max(1, len(candidates))
+        subset = candidates[: job.target_limit]
 
-        for candidate in candidates[: job.target_limit]:
+        # 1. Gather all websites to analyze
+        websites_to_analyze = list(dict.fromkeys([c.website for c in subset if c.website]))
+
+        # 2. Analyze them concurrently with a semaphore limit
+        sem = asyncio.Semaphore(settings.lead_concurrency)
+
+        analyzed_count = 0
+        total_websites = len(websites_to_analyze)
+
+        async def analyze_with_sem(url: str):
+            nonlocal analyzed_count
+            async with sem:
+                res = await self._website_analyzer.analyze(url)
+                analyzed_count += 1
+                if total_websites > 0:
+                    pct = 60 + int((analyzed_count / total_websites) * 20)
+                    job.progress = min(80, pct)
+                    await session.commit()
+                return url, res
+
+        # Run concurrently
+        analysis_tasks = [analyze_with_sem(url) for url in websites_to_analyze]
+        analysis_results = {}
+        if analysis_tasks:
+            results = await asyncio.gather(*analysis_tasks)
+            analysis_results = {url: res for url, res in results}
+        else:
+            job.progress = 80
+            await session.commit()
+
+        # 3. Persist everything sequentially (since SQLAlchemy session writes must be sequential)
+        for idx, candidate in enumerate(subset):
             business = await self._upsert_business(session, job.id, candidate)
-            if candidate.website:
-                website_result = await self._website_analyzer.analyze(candidate.website)
+            if candidate.website and candidate.website in analysis_results:
+                website_result = analysis_results[candidate.website]
                 await self._upsert_website(session, business.id, website_result.url, website_result)
                 contacts = self._contact_extractor.extract((website_result.html or "") + "\n" + "\n".join(website_result.urls))
                 await self._upsert_contacts(session, business.id, contacts.emails, contacts.phones, contacts.whatsapp, contacts.social_links)
@@ -82,8 +121,9 @@ class LeadGenerationPipeline:
                 )
             await self._upsert_lead_score(session, business.id, lead_score)
 
-        job.progress = min(100, int(len(candidates[: job.target_limit]) / total * 100))
-        await session.commit()
+            pct = 80 + int(((idx + 1) / len(subset)) * 20)
+            job.progress = min(100, pct)
+            await session.commit()
 
     async def _upsert_business(self, session: AsyncSession, job_id: int, candidate: MapBusinessCandidate) -> Business:
         # Sanitize and truncate string fields to fit database column limits
