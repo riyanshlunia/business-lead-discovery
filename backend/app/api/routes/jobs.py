@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,10 +16,11 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 @router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_job(
     payload: JobCreateRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     service: JobService = Depends(get_job_service),
 ) -> JobCreateResponse:
-    job = await service.create_job(session, payload)
+    job = await service.create_job(session, payload, background_tasks)
     return JobCreateResponse(job_id=job.id, status=job.status.value, query=job.query)
 
 

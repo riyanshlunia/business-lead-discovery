@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from fastapi import BackgroundTasks
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ from app.schemas.jobs import JobCreateRequest
 
 
 class JobService:
-    async def create_job(self, session: AsyncSession, request: JobCreateRequest) -> Job:
+    async def create_job(self, session: AsyncSession, request: JobCreateRequest, background_tasks: BackgroundTasks) -> Job:
         user = await self._get_or_create_default_user(session)
         project = await self._get_or_create_project(session, user.id, request)
         query = f"{request.industry} in {request.location}"
@@ -27,9 +28,9 @@ class JobService:
         await session.flush()
         await session.commit()
         await session.refresh(job)
-        from app.workers.tasks import run_lead_job
+        from app.workers.tasks import run_lead_job_task
 
-        run_lead_job.delay(job.id)
+        background_tasks.add_task(run_lead_job_task, job.id)
         return job
 
     async def get_job(self, session: AsyncSession, job_id: int) -> Job | None:

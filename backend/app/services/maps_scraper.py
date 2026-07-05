@@ -121,6 +121,8 @@ class GoogleMapsScraper:
         return None
 
     def _extract_rating(self, text: str) -> tuple[float | None, int | None]:
+        if not text:
+            return None, None
         # Handle formats like "4.5 \n (123)" or "4.5 (123)"
         match = re.search(r'(\d[\.,]\d)[\s\n]*\((\d[\d,]*)\)', text)
         if match:
@@ -132,6 +134,13 @@ class GoogleMapsScraper:
         match = re.search(r'(\d[\.,]\d)[\s\n]*[★⭐]', text)
         if match:
             return float(match.group(1).replace(",", ".")), None
+        
+        # Fallback: look for a standalone line that is a valid rating (1.0 to 5.0) in the first 10 non-empty lines
+        lines = [line.strip() for line in text.split("\n") if line.strip()][:10]
+        for line in lines:
+            if re.match(r'^[1-5][\.,][0-9]$', line):
+                return float(line.replace(",", ".")), None
+                
         return None, None
 
     def _extract_status(self, text: str) -> str | None:

@@ -86,6 +86,15 @@ class LeadGenerationPipeline:
         await session.commit()
 
     async def _upsert_business(self, session: AsyncSession, job_id: int, candidate: MapBusinessCandidate) -> Business:
+        # Sanitize and truncate string fields to fit database column limits
+        candidate.name = candidate.name[:255] if candidate.name else "Unknown"
+        candidate.website = candidate.website[:1024] if candidate.website else None
+        candidate.phone_number = candidate.phone_number[:64] if candidate.phone_number else None
+        candidate.address = candidate.address[:10000] if candidate.address else None  # Text column, safe limit
+        candidate.category = candidate.category[:255] if candidate.category else None
+        candidate.google_maps_url = candidate.google_maps_url[:2048] if candidate.google_maps_url else ""
+        candidate.business_status = candidate.business_status[:128] if candidate.business_status else None
+
         statement = select(Business).where(Business.google_maps_url == candidate.google_maps_url)
         result = await session.execute(statement)
         business = result.scalar_one_or_none()

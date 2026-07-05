@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from app.services.cache import RedisCache
+from app.services.cache import InMemoryCache
 
 
 @dataclass(slots=True)
@@ -33,8 +33,8 @@ class WebsiteAnalysisResult:
 
 
 class WebsiteAnalyzer:
-    def __init__(self, cache: RedisCache | None = None) -> None:
-        self._cache = cache or RedisCache()
+    def __init__(self, cache: InMemoryCache | None = None) -> None:
+        self._cache = cache or InMemoryCache()
 
     async def analyze(self, url: str) -> WebsiteAnalysisResult:
         normalized = self._normalize_url(url)
@@ -54,30 +54,42 @@ class WebsiteAnalyzer:
         result = WebsiteAnalysisResult(url=normalized)
 
         async with httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=headers) as client:
-            response = await client.get(normalized)
-            result.final_url = str(response.url)
-            result.https_enabled = response.url.scheme == "https"
-            result.ssl_enabled = result.https_enabled
-            result.load_speed_ms = int((time.perf_counter() - started) * 1000)
+            try:
+                response = await client.get(normalized)
+                result.final_url = str(response.url)
+                result.https_enabled = response.url.scheme == "https"
+                result.ssl_enabled = result.https_enabled
+                result.load_speed_ms = int((time.perf_counter() - started) * 1000)
 
-            soup = BeautifulSoup(response.text, "html.parser")
-            result.html = response.text
-            result.meta_title = self._text_or_none(soup.title.text if soup.title else None)
-            description_tag = soup.find("meta", attrs={"name": re.compile("description", re.I)})
-            if description_tag and description_tag.get("content"):
-                result.meta_description = description_tag["content"].strip()
-            result.image_count = len(soup.find_all("img"))
-            result.form_count = len(soup.find_all("form"))
-            result.mobile_viewport = bool(soup.find("meta", attrs={"name": re.compile("viewport", re.I)}))
-            result.google_analytics = bool(re.search(r"googletagmanager|gtag\(|google-analytics", response.text, re.I))
-            result.facebook_pixel = bool(re.search(r"facebook\.net/.*/fbevents\.js|fbq\(", response.text, re.I))
-            result.urls = self._collect_urls(soup, result.final_url or normalized)
-            result.contact_page_found = any("contact" in candidate.lower() or "about" in candidate.lower() for candidate in result.urls)
+                soup = BeautifulSoup(response.text, "html.parser")
+                result.html = response.text
+                result.meta_title = self._text_or_none(soup.title.text if soup.title else None)
+                description_tag = soup.find("meta", attrs={"name": re.compile("description", re.I)})
+                if description_tag and description_tag.get("content"):
+                    result.meta_description = description_tag["content"].strip()
+                result.image_count = len(soup.find_all("img"))
+                result.form_count = len(soup.find_all("form"))
+                result.mobile_viewport = bool(soup.find("meta", attrs={"name": re.compile("viewport", re.I)}))
+                result.google_analytics = bool(re.search(r"googletagmanager|gtag\(|google-analytics", response.text, re.I))
+                result.facebook_pixel = bool(re.search(r"facebook\.net/.*/fbevents\.js|fbq\(", response.text, re.I))
+                result.urls = self._collect_urls(soup, result.final_url or normalized)
+                result.contact_page_found = any("contact" in candidate.lower() or "about" in candidate.lower() for candidate in result.urls)
+            except (httpx.HTTPError, Exception):
+                # If main page request fails, save empty result & return
+                await self._cache.set_json(cache_key, asdict(result), ttl_seconds=24 * 3600)
+                return result
 
-            robots = await client.get(urljoin(result.final_url or normalized, "/robots.txt"))
-            sitemap = await client.get(urljoin(result.final_url or normalized, "/sitemap.xml"))
-            result.robots_txt = robots.status_code == 200
-            result.sitemap_xml = sitemap.status_code == 200
+            try:
+                robots = await client.get(urljoin(result.final_url or normalized, "/robots.txt"))
+                result.robots_txt = robots.status_code == 200
+            except (httpx.HTTPError, Exception):
+                result.robots_txt = False
+
+            try:
+                sitemap = await client.get(urljoin(result.final_url or normalized, "/sitemap.xml"))
+                result.sitemap_xml = sitemap.status_code == 200
+            except (httpx.HTTPError, Exception):
+                result.sitemap_xml = False
 
         await self._cache.set_json(cache_key, asdict(result), ttl_seconds=24 * 3600)
         return result

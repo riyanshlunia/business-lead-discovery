@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-leadgen}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadgen}
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -15,64 +15,19 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-
   backend:
     build:
       context: ./backend
-      target: api
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://leadgen:leadgen@postgres:5432/leadgen}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      DATABASE_URL: postgresql+asyncpg://leadgen:leadgen@postgres:5432/leadgen
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:3000}
       PLAYWRIGHT_HEADLESS: ${PLAYWRIGHT_HEADLESS:-true}
+      SECRET_KEY: ${SECRET_KEY:-change-me}
     ports:
       - "8000:8000"
-
-  migrate:
-    build:
-      context: ./backend
-      target: migrate
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://leadgen:leadgen@postgres:5432/leadgen}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-
-  worker:
-    build:
-      context: ./backend
-      target: worker
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://leadgen:leadgen@postgres:5432/leadgen}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
-      PLAYWRIGHT_HEADLESS: ${PLAYWRIGHT_HEADLESS:-true}
 
   frontend:
     build:
@@ -87,4 +42,3 @@ services:
 
 volumes:
   postgres-data:
-  redis-data:

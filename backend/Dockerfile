@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.61.0-noble AS base
+FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,15 +11,12 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
+# Upgrade pip and install the app
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ".[dev]"
+    pip install --no-cache-dir -e "."
 
-FROM base AS migrate
-CMD ["alembic", "upgrade", "head"]
+# Install Playwright chromium browser
+RUN playwright install chromium
 
-FROM base AS worker
-CMD ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
-
-# LAST STAGE = API
-FROM base
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Single stage CMD running migrations and starting the FastAPI server
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

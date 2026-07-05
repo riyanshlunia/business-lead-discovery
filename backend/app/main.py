@@ -14,11 +14,19 @@ print("CORS ORIGINS:", settings.cors_origin_list)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
-# Temporary CORS configuration for debugging
+# Root health check endpoint for platform deployment (e.g. Railway)
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+# Dynamic CORS Configuration
+origins = settings.cors_origin_list
+allow_all = "*" in origins or not origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when using "*"
+    allow_origins=["*"] if allow_all else origins,
+    allow_credentials=not allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )

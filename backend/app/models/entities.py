@@ -71,7 +71,7 @@ class Business(Base):
     name: Mapped[str] = mapped_column(String(255), index=True)
     website: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     review_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
