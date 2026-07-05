@@ -160,6 +160,15 @@ class GoogleMapsScraper:
         return None
 
     def _extract_category(self, text: str) -> str | None:
+        raw_cat = self._extract_category_raw(text)
+        if not raw_cat:
+            return None
+        # Clean unicode private use area, control characters, middots, bullets, etc.
+        cleaned = re.sub(r'[\uE000-\uF8FF\u0000-\u001F\u007F-\u009F\uFFFD\u2022\u00B7]', '', raw_cat)
+        cleaned = re.sub(r'[·•]', '', cleaned)
+        return cleaned.strip()
+
+    def _extract_category_raw(self, text: str) -> str | None:
         lines = [line.strip() for line in text.split("\n") if line.strip()]
         for i, line in enumerate(lines):
             if line.startswith("·"):
