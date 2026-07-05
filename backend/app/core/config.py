@@ -49,7 +49,7 @@ class Settings(BaseSettings):
                 "http://localhost:3001",
                 "http://127.0.0.1:3001",
             ]
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return [origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
