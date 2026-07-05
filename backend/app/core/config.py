@@ -32,6 +32,15 @@ class Settings(BaseSettings):
         return v
 
     @property
+    def database_url_async(self) -> str:
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = "postgresql+asyncpg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+            url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+        return url
+
+    @property
     def cors_origin_list(self) -> list[str]:
         if not self.cors_origins:
             return [
