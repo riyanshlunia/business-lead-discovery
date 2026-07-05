@@ -14,11 +14,12 @@ COPY app ./app
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e ".[dev]"
 
-FROM base AS api
-CMD ["sh","-c","uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
-
 FROM base AS migrate
 CMD ["alembic", "upgrade", "head"]
 
 FROM base AS worker
 CMD ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+
+# LAST STAGE = API
+FROM base
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
