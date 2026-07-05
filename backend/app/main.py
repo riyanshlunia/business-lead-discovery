@@ -22,7 +22,10 @@ try:
     print("Running database migrations...")
 
     alembic_cfg = Config("alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    alembic_cfg.set_main_option(
+    "sqlalchemy.url",
+    settings.database_url.replace("%", "%%")
+)
 
     command.upgrade(alembic_cfg, "head")
 
