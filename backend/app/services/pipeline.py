@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import get_settings
 from app.models.entities import Business, Email, Job, JobStatus, LeadScore, SocialAccount, Website
@@ -50,47 +52,53 @@ class LeadGenerationPipeline:
             await self._job_service.set_job_status(session, job_id, JobStatus.failed, error_message=error_message)
 
     async def _persist_candidates(self, session: AsyncSession, job: Job, candidates: list[MapBusinessCandidate]) -> None:
-        import asyncio
-        total = max(1, len(candidates))
         subset = candidates[: job.target_limit]
 
-        # 1. Gather all websites to analyze
+        # 1. Gather all unique websites to analyze
         websites_to_analyze = list(dict.fromkeys([c.website for c in subset if c.website]))
 
-        # 2. Analyze them concurrently with a semaphore limit
+        # 2. Analyze + extract contacts concurrently with a semaphore limit.
+        #    Contact extraction is pure CPU/regex work on already-downloaded HTML —
+        #    no I/O, no session — so it's free to run inside the concurrent gather.
+        #    NOTE: Do NOT touch the session inside analyze_with_sem — SQLAlchemy
+        #    AsyncSession is NOT safe for concurrent access.
         sem = asyncio.Semaphore(settings.lead_concurrency)
 
-        analyzed_count = 0
-        total_websites = len(websites_to_analyze)
-
         async def analyze_with_sem(url: str):
-            nonlocal analyzed_count
             async with sem:
                 res = await self._website_analyzer.analyze(url)
-                analyzed_count += 1
-                if total_websites > 0:
-                    pct = 60 + int((analyzed_count / total_websites) * 20)
-                    job.progress = min(80, pct)
-                    await session.commit()
-                return url, res
+                contacts = self._contact_extractor.extract(
+                    (res.html or "") + "\n" + "\n".join(res.urls)
+                )
+                return url, res, contacts
 
-        # Run concurrently
-        analysis_tasks = [analyze_with_sem(url) for url in websites_to_analyze]
-        analysis_results = {}
-        if analysis_tasks:
-            results = await asyncio.gather(*analysis_tasks)
-            analysis_results = {url: res for url, res in results}
-        else:
-            job.progress = 80
-            await session.commit()
+        # return_exceptions=True prevents one bad URL from killing the entire job.
+        analysis_results: dict[str, tuple] = {}
+        try:
+            if websites_to_analyze:
+                raw = await asyncio.gather(
+                    *[analyze_with_sem(url) for url in websites_to_analyze],
+                    return_exceptions=True,
+                )
+                for item in raw:
+                    if isinstance(item, Exception):
+                        continue  # skip failed URLs gracefully
+                    url, res, contacts = item
+                    analysis_results[url] = (res, contacts)
+        finally:
+            # Release the shared httpx connection pool.
+            await self._website_analyzer.close()
 
-        # 3. Persist everything sequentially (since SQLAlchemy session writes must be sequential)
+        # Single progress commit after all analysis is done (safe — sequential).
+        job.progress = 80
+        await session.commit()
+
+        # 3. Persist everything sequentially (SQLAlchemy session writes must be sequential)
         for idx, candidate in enumerate(subset):
             business = await self._upsert_business(session, job.id, candidate)
             if candidate.website and candidate.website in analysis_results:
-                website_result = analysis_results[candidate.website]
+                website_result, contacts = analysis_results[candidate.website]
                 await self._upsert_website(session, business.id, website_result.url, website_result)
-                contacts = self._contact_extractor.extract((website_result.html or "") + "\n" + "\n".join(website_result.urls))
                 await self._upsert_contacts(session, business.id, contacts.emails, contacts.phones, contacts.whatsapp, contacts.social_links)
                 # Merge website-extracted phone into business if Maps didn't find one
                 if not business.phone_number and contacts.phones:
@@ -121,16 +129,16 @@ class LeadGenerationPipeline:
                 )
             await self._upsert_lead_score(session, business.id, lead_score)
 
-            pct = 80 + int(((idx + 1) / len(subset)) * 20)
-            job.progress = min(100, pct)
-            await session.commit()
+        # Single commit for all persisted businesses — N commits → 1 round-trip.
+        job.progress = 100
+        await session.commit()
 
     async def _upsert_business(self, session: AsyncSession, job_id: int, candidate: MapBusinessCandidate) -> Business:
         # Sanitize and truncate string fields to fit database column limits
         candidate.name = candidate.name[:255] if candidate.name else "Unknown"
         candidate.website = candidate.website[:1024] if candidate.website else None
         candidate.phone_number = candidate.phone_number[:64] if candidate.phone_number else None
-        candidate.address = candidate.address[:10000] if candidate.address else None  # Text column, safe limit
+        candidate.address = candidate.address[:10000] if candidate.address else None
         candidate.category = candidate.category[:255] if candidate.category else None
         candidate.google_maps_url = candidate.google_maps_url[:2048] if candidate.google_maps_url else ""
         candidate.business_status = candidate.business_status[:128] if candidate.business_status else None
@@ -156,24 +164,22 @@ class LeadGenerationPipeline:
             business = Business(job_id=job_id, **asdict(candidate))
             session.add(business)
         await session.flush()
-        await session.refresh(business)
         return business
 
     async def _upsert_website(self, session: AsyncSession, business_id: int, url: str, analysis) -> None:
-        statement = select(Website).where(Website.business_id == business_id)
-        result = await session.execute(statement)
-        website = result.scalar_one_or_none()
         payload = asdict(analysis)
         payload.pop("html", None)
         payload.pop("urls", None)
-        payload.pop("url", None)  # already passed explicitly as url=url
-        if website is None:
-            website = Website(business_id=business_id, url=url, **payload)
-            session.add(website)
-        else:
-            for key, value in payload.items():
-                setattr(website, key, value)
-        await session.flush()
+        payload.pop("url", None)  # already passed explicitly
+        stmt = (
+            pg_insert(Website)
+            .values(business_id=business_id, url=url, **payload)
+            .on_conflict_do_update(
+                index_elements=[Website.business_id],
+                set_={"url": url, **payload},
+            )
+        )
+        await session.execute(stmt)
 
     async def _upsert_contacts(
         self,
@@ -191,25 +197,26 @@ class LeadGenerationPipeline:
         for platform, urls in social_links.items():
             for url in urls:
                 session.add(SocialAccount(business_id=business_id, platform=platform, url=url, handle=None))
-        # Store WhatsApp numbers as social accounts
         for wa_url in whatsapp:
             session.add(SocialAccount(business_id=business_id, platform="whatsapp", url=wa_url, handle=None))
         await session.flush()
 
     async def _upsert_lead_score(self, session: AsyncSession, business_id: int, score) -> None:
-        statement = select(LeadScore).where(LeadScore.business_id == business_id)
-        result = await session.execute(statement)
-        lead_score = result.scalar_one_or_none()
-        if lead_score is None:
-            lead_score = LeadScore(
+        stmt = (
+            pg_insert(LeadScore)
+            .values(
                 business_id=business_id,
                 digital_presence_score=score.digital_presence_score,
                 lead_opportunity_score=score.lead_opportunity_score,
                 explanation=score.explanation,
             )
-            session.add(lead_score)
-        else:
-            lead_score.digital_presence_score = score.digital_presence_score
-            lead_score.lead_opportunity_score = score.lead_opportunity_score
-            lead_score.explanation = score.explanation
-        await session.flush()
+            .on_conflict_do_update(
+                index_elements=[LeadScore.business_id],
+                set_={
+                    "digital_presence_score": score.digital_presence_score,
+                    "lead_opportunity_score": score.lead_opportunity_score,
+                    "explanation": score.explanation,
+                },
+            )
+        )
+        await session.execute(stmt)

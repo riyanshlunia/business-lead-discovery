@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     playwright_headless: bool = Field(default=True, alias="PLAYWRIGHT_HEADLESS")
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    lead_concurrency: int = 6
-    max_businesses_per_job: int = 100
+    lead_concurrency: int = Field(default=6, alias="LEAD_CONCURRENCY")
+    max_businesses_per_job: int = Field(default=100, alias="MAX_BUSINESSES_PER_JOB")
 
     @field_validator("database_url", mode="before")
     @classmethod

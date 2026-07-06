@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Download,
@@ -275,23 +275,6 @@ function DetailDrawer({ biz, onClose }: { biz: Business; onClose: () => void }) 
           )}
         </div>
 
-        {/* Convert Lead Action Footer */}
-        <div className="pt-4 border-t border-white/5">
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <button className="flex flex-col items-center justify-center gap-1 py-2 px-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]">
-              <UserPlus className="h-4 w-4 text-[#4edea3]" />
-              <span className="font-label-caps text-[9px] tracking-wider text-[#c7c4d7]">Add Lead</span>
-            </button>
-            <button className="flex flex-col items-center justify-center gap-1 py-2 px-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]">
-              <Share2 className="h-4 w-4 text-[#c0c1ff]" />
-              <span className="font-label-caps text-[9px] tracking-wider text-[#c7c4d7]">Share</span>
-            </button>
-          </div>
-          <button className="w-full py-3 bg-[#c0c1ff] text-[#0d0096] font-bold text-sm rounded-xl flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-[#c0c1ff]/20">
-            Convert Lead
-            <Rocket className="h-4 w-4 fill-[#0d0096]/20" />
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -487,8 +470,9 @@ function LeadsTable({ businesses, jobId }: { businesses: Business[]; jobId: numb
 export default function HomePage() {
   const [industry, setIndustry] = useState('Digital Marketing Agencies');
   const [location, setLocation] = useState('London');
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState('20');
   const [jobId, setJobId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
 
   const createMutation = useMutation({
     mutationFn: createJob,
@@ -509,13 +493,25 @@ export default function HomePage() {
   const statusColor = status === 'completed' ? 'green' : status === 'failed' ? 'red' : status === 'running' ? 'yellow' : 'slate';
 
   const businessesQuery = useQuery({
-    queryKey: ['businesses', jobId, status],
+    // NOTE: Do NOT include `status` in queryKey — that causes a new fetch on
+    // every job poll (doubling requests). JobId alone is the right cache key.
+    queryKey: ['businesses', jobId],
     queryFn: () => getBusinesses(jobId as number),
     enabled: jobId !== null,
-    refetchInterval: () => {
-      return status === 'running' ? 2500 : false;
-    },
+    // Refetch every 2.5s while job is running; do one final fetch when it
+    // completes by keeping staleTime at 0 and letting the query re-run once
+    // the status flips (via jobQuery invalidating it below).
+    refetchInterval: status === 'running' || status === 'queued' ? 2500 : false,
+    // Always consider data stale so the final fetch after completion works.
+    staleTime: 0,
   });
+
+  // When job completes or fails, do one final businesses fetch to get all results.
+  useEffect(() => {
+    if ((status === 'completed' || status === 'failed') && jobId !== null) {
+      queryClient.invalidateQueries({ queryKey: ['businesses', jobId] });
+    }
+  }, [status, jobId, queryClient]);
 
   const leads = businessesQuery.data ?? [];
   
@@ -591,10 +587,13 @@ export default function HomePage() {
                 <ListFilter className="h-4 w-4 text-[#c0c1ff]" />
                 <input 
                   value={limit} 
-                  onChange={e => setLimit(Number(e.target.value) || 10)} 
-                  type="number" 
-                  min={1} 
-                  max={500} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d+$/.test(val)) {
+                      setLimit(val);
+                    }
+                  }} 
+                  type="text" 
                   placeholder="Max"
                   className="bg-transparent border-none p-0 focus:ring-0 text-xs text-white w-full placeholder-[#c7c4d7]/30"
                 />
@@ -602,7 +601,7 @@ export default function HomePage() {
             </div>
 
             <button 
-              onClick={() => createMutation.mutate({ industry, location, limit })}
+              onClick={() => createMutation.mutate({ industry, location, limit: Number(limit) || 20 })}
               disabled={createMutation.isPending || (status === 'running' || status === 'queued')}
               className="md:col-span-2 bg-[#c0c1ff] text-[#0d0096] py-3 rounded-lg font-bold font-label-caps text-[11px] tracking-wider uppercase flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-[#c0c1ff]/10"
             >
