@@ -32,9 +32,16 @@ class LeadGenerationPipeline:
             return
         await self._job_service.set_job_status(session, job_id, JobStatus.running)
 
+        lock = asyncio.Lock()
+        last_progress = job.progress or 0
+
         async def progress_callback(progress_val: int):
-            job.progress = progress_val
-            await session.commit()
+            nonlocal last_progress
+            async with lock:
+                if progress_val > last_progress:
+                    last_progress = progress_val
+                    job.progress = progress_val
+                    await session.commit()
 
         try:
             candidates = await self._maps_scraper.discover_businesses(

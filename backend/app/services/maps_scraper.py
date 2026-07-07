@@ -140,7 +140,7 @@ class GoogleMapsScraper:
         return None
 
     def _extract_phone(self, text: str) -> str | None:
-        match = re.search(r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}', text)
+        match = re.search(r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5}', text)
         return match.group(0).strip() if match else None
 
     def _extract_address(self, text: str) -> str | None:

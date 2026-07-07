@@ -162,3 +162,80 @@ class Export(Base):
     file_name: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SocialSearch(Base):
+    __tablename__ = "social_searches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.queued, index=True)
+    industry: Mapped[str] = mapped_column(String(255), index=True)
+    location: Mapped[str] = mapped_column(String(255), index=True)
+    keywords: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sources: Mapped[dict] = mapped_column(JSON, default=list)
+    filters: Mapped[dict] = mapped_column(JSON, default=dict)
+    query_summary: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    target_limit: Mapped[int] = mapped_column(Integer, default=20)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    total_found: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    leads: Mapped[list[SocialLead]] = relationship(back_populates="search", cascade="all,delete-orphan")
+
+
+class SocialLead(Base):
+    __tablename__ = "social_leads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    search_id: Mapped[int] = mapped_column(ForeignKey("social_searches.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    source_platform: Mapped[str] = mapped_column(String(64), index=True)
+    profile_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    linkedin: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    facebook: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    instagram: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    twitter: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    github: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    youtube: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    city: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    services: Mapped[dict] = mapped_column(JSON, default=list)
+    employee_estimate: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    technologies: Mapped[dict] = mapped_column(JSON, default=list)
+    google_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    review_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_activity: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    confidence_score: Mapped[int] = mapped_column(Integer, default=0)
+    lead_score: Mapped[int] = mapped_column(Integer, default=0)
+    digital_score: Mapped[int] = mapped_column(Integer, default=0)
+    has_website: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_email: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_phone: Mapped[bool] = mapped_column(Boolean, default=False)
+    raw_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    search: Mapped[SocialSearch] = relationship(back_populates="leads")
+
+
+class SavedSearch(Base):
+    __tablename__ = "saved_searches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    industry: Mapped[str] = mapped_column(String(255))
+    location: Mapped[str] = mapped_column(String(255))
+    keywords: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sources: Mapped[dict] = mapped_column(JSON, default=list)
+    filters: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
